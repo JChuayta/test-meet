@@ -21,7 +21,6 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.handshake.auth.userId as string;
     if (userId) {
       await this.roomsService.registerUser(userId, client.id);
-      console.log(`Rooms: User ${userId} connected with socket ${client.id}`);
     }
   }
 
@@ -29,8 +28,13 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.handshake.auth.userId as string;
     if (userId) {
       await this.roomsService.unregisterUser(userId);
-      console.log(`Rooms: User ${userId} disconnected`);
     }
+  }
+
+  @SubscribeMessage('room:join')
+  async handleJoinRoom(@MessageBody() data: { roomId: string }, @ConnectedSocket() client: Socket) {
+    client.join(data.roomId);
+    return { success: true };
   }
 
   @SubscribeMessage('room:create')
@@ -47,12 +51,17 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = await this.roomsService.findByInviteLink(data.inviteLink);
     if (!room) return { success: false, error: 'Room not found' };
     const request = await this.roomsService.joinRequest(room.id, data.userId, data.userName);
+    
     client.emit('room:request-received', { roomId: room.id, request });
-
+    
     const ownerSocketId = await this.roomsService.getSocketIdByUserId(room.ownerId);
+    
     if (ownerSocketId) {
       this.server.to(ownerSocketId).emit('room:pending-request', { roomId: room.id, request });
+    } else {
+      this.server.to(room.id).emit('room:pending-request', { roomId: room.id, request });
     }
+    
     return { success: true, roomId: room.id };
   }
 
@@ -93,11 +102,5 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return participants;
   }
 
-  private findSocketByUserId(userId: string): Socket | undefined {
-    if (!this.server.sockets || !this.server.sockets.sockets) {
-      return undefined;
-    }
-    const sockets = Array.from(this.server.sockets.sockets.values()) as Socket[];
-    return sockets.find((socket) => socket.handshake.auth.userId === userId);
-  }
+  
 }

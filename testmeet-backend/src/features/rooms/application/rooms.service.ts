@@ -31,7 +31,12 @@ export class RoomsService {
   async createRoom(ownerId: string, name: string): Promise<Room> {
     const inviteLink = this.generateLink();
     const room = this.roomRepository.create({ name, inviteLink, ownerId });
-    return this.roomRepository.save(room);
+    const savedRoom = await this.roomRepository.save(room);
+    
+    const participant = this.participantRepository.create({ roomId: savedRoom.id, userId: ownerId });
+    await this.participantRepository.save(participant);
+    
+    return savedRoom;
   }
 
   async findByInviteLink(inviteLink: string): Promise<Room | null> {

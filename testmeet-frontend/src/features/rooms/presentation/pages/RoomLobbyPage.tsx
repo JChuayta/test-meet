@@ -24,6 +24,13 @@ export function RoomLobbyPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
 
+  // Conectar socket inmediatamente
+  useEffect(() => {
+    if (user) {
+      const socket = getRoomsSocket(user.id);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!inviteLink || !user) return;
 
@@ -31,38 +38,59 @@ export function RoomLobbyPage() {
       .then((res) => res.json())
       .then((data) => {
         setRoomData(data);
-        setIsOwner(data.ownerId === user.id);
+        const isOwnerLocal = data.ownerId === user.id;
+        setIsOwner(isOwnerLocal);
         setRoom(data);
+        
+        // Unirse a la sala en el socket para recibir eventos
+        if (user?.id) {
+          const socket = getRoomsSocket(user.id);
+          socket.emit('room:join', { roomId: data.id });
+        }
+        
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  }, [inviteLink, user]);
+
+  useEffect(() => {
+    if (!user || !room) return;
 
     const socket = getRoomsSocket(user.id);
+    const isOwnerLocal = room.ownerId === user.id;
 
-    if (user) {
-      if (!isOwner) {
-        socket.emit('room:join-request', { inviteLink, userId: user.id, userName: user.name });
-      }
-
-      socket.on('room:pending-request', ({ request }: { request: any }) => {
-        console.log('Pending request received:', request);
+    // Setup para que el owner reciba solicitudes pendientes
+    if (isOwnerLocal) {
+      const handlePendingRequest = ({ request }: { request: any }) => {
         setPendingRequests((prev) => {
-          if (prev.some((r) => r.id === request.id)) return prev;
+          const isDuplicate = prev.some((r) => r.id === request.id);
+          if (isDuplicate) return prev;
           return [...prev, request];
         });
-        setShowRequests(true);
-      });
+      };
+      
+      socket.on('room:pending-request', handlePendingRequest);
 
-      socket.on('room:join-approved', () => {
-        navigate(`/room/${room?.id}/session`);
-      });
+      return () => {
+        socket.off('room:pending-request', handlePendingRequest);
+      };
     }
+    
+    // Setup para que no-owner escuche aprobación
+    if (!isOwnerLocal) {
+      socket.emit('room:join-request', { inviteLink, userId: user.id, userName: user.name });
+      
+      const handleApproved = () => {
+        navigate(`/room/${room.id}/session`);
+      };
+      
+      socket.on('room:join-approved', handleApproved);
 
-    return () => {
-      socket.off('room:pending-request');
-      socket.off('room:join-approved');
-    };
-  }, [inviteLink, user, isOwner, room]);
+      return () => {
+        socket.off('room:join-approved', handleApproved);
+      };
+    }
+  }, [room?.id, room?.ownerId, user, inviteLink, navigate]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/room/${inviteLink}`);
@@ -114,7 +142,7 @@ export function RoomLobbyPage() {
   return (
     <Card style={{ width: '450px' }}>
       <Card.Body>
-        {isOwner ? (
+        {isOwner || room?.ownerId === user?.id ? (
           <>
             <div className="text-center mb-4">
               <h4>{room?.name}</h4>
