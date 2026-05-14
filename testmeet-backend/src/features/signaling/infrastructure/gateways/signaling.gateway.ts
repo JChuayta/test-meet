@@ -1,11 +1,11 @@
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
@@ -20,7 +20,6 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const userId = client.handshake.auth.userId as string;
     if (userId) {
       this.userSocketMap.set(userId, client.id);
-      console.log(`Signaling: User ${userId} connected with socket ${client.id}`);
     }
   }
 
@@ -28,7 +27,6 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const userId = client.handshake.auth.userId as string;
     if (userId) {
       this.userSocketMap.delete(userId);
-      console.log(`Signaling: User ${userId} disconnected`);
     }
   }
 
@@ -40,16 +38,11 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const callerId = Array.from(this.userSocketMap.entries()).find(([_, socketId]) => socketId === client.id)?.[0];
     const targetSocket = this.findSocketByUserId(data.participantId);
     
-    console.log(`[call:initiate] From ${callerId} to ${data.participantId}`);
-    
     if (targetSocket) {
-      console.log(`Sending call:received to ${data.participantId}`);
-      targetSocket.emit('call:received', { 
-        fromUserId: callerId, 
-        offerSdp: data.offerSdp 
+      targetSocket.emit('call:received', {
+        fromUserId: callerId,
+        offerSdp: data.offerSdp
       });
-    } else {
-      console.log(`Target socket not found for ${data.participantId}`);
     }
   }
 
@@ -61,10 +54,7 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const answererId = Array.from(this.userSocketMap.entries()).find(([_, socketId]) => socketId === client.id)?.[0];
     const targetSocket = this.findSocketByUserId(data.participantId);
     
-    console.log(`[call:answer] From ${answererId} to ${data.participantId}`);
-    
     if (targetSocket) {
-      console.log(`Sending call:answered to ${data.participantId}`);
       targetSocket.emit('call:answered', { 
         participantId: answererId,
         answerSdp: data.answerSdp 
@@ -81,7 +71,7 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const targetSocket = this.findSocketByUserId(data.participantId);
     
     if (targetSocket) {
-      targetSocket.emit('ice:received', { 
+      targetSocket.emit('ice:candidate', { 
         participantId: senderId,
         candidate: data.candidate 
       });
@@ -89,11 +79,16 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
   }
 
   private findSocketByUserId(userId: string): Socket | undefined {
-    if (!this.server.sockets || !this.server.sockets.sockets) {
+    if (!this.server.sockets?.sockets) {
       return undefined;
     }
-    const socketId = this.userSocketMap.get(userId);
-    if (!socketId) return undefined;
-    return this.server.sockets.sockets.get(socketId) as Socket;
+    let foundSocket: Socket | undefined;
+    this.server.sockets.sockets.forEach((socket, id) => {
+      if (socket.handshake.auth.userId === userId) {
+        this.userSocketMap.set(userId, id);
+        foundSocket = socket;
+      }
+    });
+    return foundSocket;
   }
 }

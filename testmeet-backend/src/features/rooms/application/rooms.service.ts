@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Room } from '../domain/entities/room.entity';
-import { RoomParticipant } from '../domain/entities/room-participant.entity';
-import { RoomRequest, RequestStatus } from '../domain/entities/room-request.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { RoomParticipant } from '../domain/entities/room-participant.entity';
+import { RequestStatus, RoomRequest } from '../domain/entities/room-request.entity';
+import { Room } from '../domain/entities/room.entity';
 
 @Injectable()
 export class RoomsService {

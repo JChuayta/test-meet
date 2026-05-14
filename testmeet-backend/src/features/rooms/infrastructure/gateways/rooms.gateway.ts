@@ -1,11 +1,11 @@
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
-  ConnectedSocket,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
+    ConnectedSocket,
+    MessageBody,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    SubscribeMessage,
+    WebSocketGateway,
+    WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RoomsService } from '../../application/rooms.service';
@@ -49,19 +49,22 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('room:join-request')
   async handleJoinRequest(@MessageBody() data: { inviteLink: string; userId: string; userName: string }, @ConnectedSocket() client: Socket) {
     const room = await this.roomsService.findByInviteLink(data.inviteLink);
-    if (!room) return { success: false, error: 'Room not found' };
+    if (!room) {
+      return { success: false, error: 'Room not found' };
+    }
+
     const request = await this.roomsService.joinRequest(room.id, data.userId, data.userName);
-    
+
     client.emit('room:request-received', { roomId: room.id, request });
-    
+
     const ownerSocketId = await this.roomsService.getSocketIdByUserId(room.ownerId);
-    
+
     if (ownerSocketId) {
       this.server.to(ownerSocketId).emit('room:pending-request', { roomId: room.id, request });
     } else {
       this.server.to(room.id).emit('room:pending-request', { roomId: room.id, request });
     }
-    
+
     return { success: true, roomId: room.id };
   }
 
@@ -101,6 +104,4 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const participants = await this.roomsService.getParticipants(data.roomId);
     return participants;
   }
-
-  
 }
