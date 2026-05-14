@@ -30,7 +30,10 @@ export function ChatPanel({ roomId, userId, onClose }: ChatPanelProps) {
     socketRef.current.on('connect', () => setIsConnected(true));
     socketRef.current.on('disconnect', () => setIsConnected(false));
     socketRef.current.on('chat:message', (msg: Message) => {
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => {
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
     });
     socketRef.current.on('chat:history', (msgs: Message[]) => {
       setMessages(msgs);
@@ -38,6 +41,10 @@ export function ChatPanel({ roomId, userId, onClose }: ChatPanelProps) {
 
     return () => {
       socketRef.current?.emit('chat:leave-room', { roomId });
+      socketRef.current?.off('connect');
+      socketRef.current?.off('disconnect');
+      socketRef.current?.off('chat:message');
+      socketRef.current?.off('chat:history');
     };
   }, [roomId, userId]);
 
