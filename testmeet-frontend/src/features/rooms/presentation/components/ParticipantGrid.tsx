@@ -2,10 +2,16 @@ import { useRef } from 'react';
 import { VideoPlayer } from '../../../signaling/presentation/components/VideoPlayer';
 import styles from './ParticipantGrid.module.css';
 
+interface Participant {
+  userId: string;
+  userName: string;
+}
+
 interface ParticipantGridProps {
-  participants: string[];
+  participants: Participant[];
   localStream: MediaStream | null;
   localUserId: string;
+  localUserName: string;
   remoteStreams?: Map<string, MediaStream>;
   callStatus?: 'idle' | 'calling' | 'answered' | 'connected';
   activeParticipants?: Set<string>;
@@ -16,6 +22,7 @@ export const ParticipantGrid = (props: ParticipantGridProps) => {
     participants,
     localStream,
     localUserId,
+    localUserName,
     remoteStreams = new Map(),
     callStatus = 'idle',
     activeParticipants = new Set()
@@ -23,17 +30,17 @@ export const ParticipantGrid = (props: ParticipantGridProps) => {
 
   const localVideoRef = useRef<HTMLDivElement>(null);
 
-  const getConnectionLabel = (participantId: string): string => {
+  const getConnectionLabel = (participantId: string, userName: string): string => {
     if (activeParticipants.has(participantId)) {
-      return participantId;
+      return userName;
     }
     if (callStatus === 'calling') {
-      return `${participantId} - Llamando...`;
+      return `${userName} - Llamando...`;
     }
-    return `${participantId} - Conectando...`;
+    return `${userName} - Conectando...`;
   };
 
-  const totalParticipants = (participants?.filter(id => id !== localUserId)?.length || 0) + 1;
+  const totalParticipants = (participants?.filter(p => p.userId !== localUserId)?.length || 0) + 1;
   let gridClass = styles.grid1;
   if (totalParticipants === 2) gridClass = styles.grid2;
   else if (totalParticipants === 3) gridClass = styles.grid3;
@@ -46,18 +53,18 @@ export const ParticipantGrid = (props: ParticipantGridProps) => {
         <VideoPlayer
           stream={localStream}
           muted
-          placeholder={`${localUserId} (Tú)`}
+          placeholder={`${localUserName} (Tú)`}
         />
-        <span className={styles.label}>{localUserId} (Tú)</span>
+        <span className={styles.label}>{localUserName} (Tú)</span>
       </div>
 
-      {(participants || []).filter(id => id !== localUserId).map((participantId) => (
-        <div key={participantId} className={styles.cell}>
+      {(participants || []).filter(p => p.userId !== localUserId).map((participant) => (
+        <div key={participant.userId} className={styles.cell}>
           <VideoPlayer
-            stream={remoteStreams.get(participantId) || null}
-            placeholder={getConnectionLabel(participantId)}
+            stream={remoteStreams.get(participant.userId) || null}
+            placeholder={getConnectionLabel(participant.userId, participant.userName)}
           />
-          <span className={styles.label}>{getConnectionLabel(participantId)}</span>
+          <span className={styles.label}>{getConnectionLabel(participant.userId, participant.userName)}</span>
         </div>
       ))}
     </div>

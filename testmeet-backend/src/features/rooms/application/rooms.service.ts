@@ -39,12 +39,28 @@ export class RoomsService {
     return savedRoom;
   }
 
-  async findByInviteLink(inviteLink: string): Promise<Room | null> {
-    return this.roomRepository.findOne({ where: { inviteLink }, relations: ['participants', 'requests'] });
+  async findByInviteLink(inviteLink: string): Promise<any> {
+    const room = await this.roomRepository.findOne({ 
+      where: { inviteLink }, 
+      relations: ['participants', 'participants.user', 'requests'] 
+    });
+    if (!room) return null;
+    return {
+      ...room,
+      participants: room.participants.map(p => ({ userId: p.userId, userName: p.user?.name || 'Unknown' }))
+    };
   }
 
-  async findById(id: string): Promise<Room | null> {
-    return this.roomRepository.findOne({ where: { id }, relations: ['participants', 'requests'] });
+  async findById(id: string): Promise<any> {
+    const room = await this.roomRepository.findOne({ 
+      where: { id }, 
+      relations: ['participants', 'participants.user', 'requests'] 
+    });
+    if (!room) return null;
+    return {
+      ...room,
+      participants: room.participants.map(p => ({ userId: p.userId, userName: p.user?.name || 'Unknown' }))
+    };
   }
 
   async joinRequest(roomId: string, userId: string, userName: string): Promise<RoomRequest> {
@@ -54,7 +70,7 @@ export class RoomsService {
     return this.requestRepository.save(request);
   }
 
-  async approveUser(roomId: string, userId: string): Promise<void> {
+  async approveUser(roomId: string, userId: string, userName: string): Promise<void> {
     await this.requestRepository.update({ roomId, userId }, { status: RequestStatus.APPROVED });
     const participant = this.participantRepository.create({ roomId, userId });
     await this.participantRepository.save(participant);
@@ -68,9 +84,12 @@ export class RoomsService {
     await this.participantRepository.delete({ roomId, userId });
   }
 
-  async getParticipants(roomId: string): Promise<string[]> {
-    const participants = await this.participantRepository.find({ where: { roomId } });
-    return participants.map((p) => p.userId);
+  async getParticipants(roomId: string): Promise<{ userId: string; userName: string }[]> {
+    const participants = await this.participantRepository.find({ 
+      where: { roomId },
+      relations: ['user']
+    });
+    return participants.map((p) => ({ userId: p.userId, userName: p.user?.name || 'Unknown' }));
   }
 
   async getPendingRequests(roomId: string): Promise<RoomRequest[]> {

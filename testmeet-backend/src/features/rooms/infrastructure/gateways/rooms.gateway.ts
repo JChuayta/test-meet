@@ -1,11 +1,11 @@
 import {
-    ConnectedSocket,
-    MessageBody,
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    SubscribeMessage,
-    WebSocketGateway,
-    WebSocketServer,
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RoomsService } from '../../application/rooms.service';
@@ -13,7 +13,7 @@ import { RoomsService } from '../../application/rooms.service';
 @WebSocketGateway({ namespace: '/rooms', cors: { origin: '*' } })
 export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(private readonly roomsService: RoomsService) {}
 
@@ -69,14 +69,14 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('room:approve')
-  async handleApproveUser(@MessageBody() data: { roomId: string; userId: string }) {
-    await this.roomsService.approveUser(data.roomId, data.userId);
+  async handleApproveUser(@MessageBody() data: { roomId: string; userId: string; userName: string }) {
+    await this.roomsService.approveUser(data.roomId, data.userId, data.userName);
     const participants = await this.roomsService.getParticipants(data.roomId);
     const userSocketId = await this.roomsService.getSocketIdByUserId(data.userId);
     if (userSocketId) {
       this.server.to(userSocketId).emit('room:join-approved', { roomId: data.roomId });
     }
-    this.server.to(data.roomId).emit('room:user-joined', { roomId: data.roomId, userId: data.userId });
+    this.server.to(data.roomId).emit('room:user-joined', { roomId: data.roomId, userId: data.userId, userName: data.userName });
     return { success: true };
   }
 

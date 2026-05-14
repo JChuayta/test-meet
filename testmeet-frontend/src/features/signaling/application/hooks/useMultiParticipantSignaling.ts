@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSocket } from '../../../../shared/config/socket';
 import type { Call } from '../../domain/types';
 
+interface Participant {
+  userId: string;
+  userName: string;
+}
+
 interface UseMultiParticipantSignalingProps {
   userId: string;
-  participants: string[];
+  participants: Participant[];
 }
 
 interface UseMultiParticipantSignalingReturn {
@@ -158,7 +163,7 @@ export const useMultiParticipantSignaling = ({
         if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
           pc.close();
           peerConnectionsRef.current.delete(participantId);
-          pc = null;
+          pc = undefined;
         }
       }
 
@@ -332,11 +337,11 @@ export const useMultiParticipantSignaling = ({
   useEffect(() => {
     if (!participants || participants.length === 0) return;
 
-    const remoteParticipants = participants.filter(id => id !== userId);
+    const remoteParticipantIds = participants.filter(p => p.userId !== userId).map(p => p.userId);
     const currentConnections = new Set(peerConnectionsRef.current.keys());
 
     for (const participantId of currentConnections) {
-      if (!remoteParticipants.includes(participantId)) {
+      if (!remoteParticipantIds.includes(participantId)) {
         closePeerConnection(participantId);
       }
     }

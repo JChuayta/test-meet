@@ -23,7 +23,7 @@ export function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [participants, setParticipants] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<{ userId: string; userName: string }[]>([]);
   const roomsSocketRef = useRef<any>(null);
   const calledParticipantsRef = useRef<Set<string>>(new Set());
   const initiateRef = useRef<((participantId: string) => Promise<void>) | null>(null);
@@ -54,8 +54,7 @@ export function RoomPage() {
         setIsOwner(data.ownerId === user.id);
         setLoading(false);
         if (data.participants) {
-          const participantIds = data.participants.map((p: any) => p.userId);
-          setParticipants(participantIds);
+          setParticipants(data.participants.map((p: any) => ({ userId: p.userId, userName: p.userName })));
         }
       })
       .catch(() => setLoading(false));
@@ -64,10 +63,10 @@ export function RoomPage() {
     roomsSocketRef.current = socket;
     socket.emit('room:join', { roomId });
 
-    socket.on('room:user-joined', ({ userId: newUserId }: { userId: string }) => {
-      setParticipants((prev: string[]) => {
-        if (prev.includes(newUserId)) return prev;
-        return [...prev, newUserId];
+    socket.on('room:user-joined', ({ userId: newUserId, userName: newUserName }: { userId: string; userName: string }) => {
+      setParticipants((prev) => {
+        if (prev.some(p => p.userId === newUserId)) return prev;
+        return [...prev, { userId: newUserId, userName: newUserName }];
       });
     });
 
@@ -79,7 +78,7 @@ export function RoomPage() {
     });
 
     socket.on('room:user-left', ({ userId: leftUserId }: { userId: string }) => {
-      setParticipants((prev) => prev.filter((id) => id !== leftUserId));
+      setParticipants((prev) => prev.filter((p) => p.userId !== leftUserId));
     });
 
     return () => {
@@ -93,19 +92,19 @@ export function RoomPage() {
     if (!participants || participants.length === 0 || !user) return;
     if (!isOwner) return;
 
-    const remoteParticipants = participants.filter(id => id !== user.id);
+    const remoteParticipants = participants.filter(p => p.userId !== user.id);
     if (remoteParticipants.length === 0) return;
 
     let delay = 0;
-    remoteParticipants.forEach((participantId) => {
-      if (calledParticipantsRef.current.has(participantId)) {
+    remoteParticipants.forEach((participant) => {
+      if (calledParticipantsRef.current.has(participant.userId)) {
         return;
       }
-      calledParticipantsRef.current.add(participantId);
+      calledParticipantsRef.current.add(participant.userId);
       delay += 1000;
       setTimeout(() => {
-        initiateRef.current?.(participantId).catch(() => {
-          calledParticipantsRef.current.delete(participantId);
+        initiateRef.current?.(participant.userId).catch(() => {
+          calledParticipantsRef.current.delete(participant.userId);
         });
       }, delay);
     });
@@ -150,6 +149,7 @@ export function RoomPage() {
           participants={participants}
           localStream={localStream}
           localUserId={user?.id || ''}
+          localUserName={user?.name || ''}
           remoteStreams={remoteStreams}
           callStatus={callStatus}
           activeParticipants={activeParticipants}

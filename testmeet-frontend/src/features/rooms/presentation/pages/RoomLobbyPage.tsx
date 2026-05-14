@@ -1,116 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Card, Spinner } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getRoomsSocket } from '../../../../shared/config/socket';
-import { useRoom } from '../../../../shared/context/RoomContext';
 import { useUser } from '../../../../shared/context/UserContext';
+import { useRoomData, useRoomSocket } from '../../application/hooks/useRoomData';
 import { PendingRequestsModal } from '../components/PendingRequestsModal';
-
-interface PendingRequest {
-  id: string;
-  userId: string;
-  userName: string;
-}
-
-interface RoomData {
-  id: string;
-  name: string;
-  inviteLink: string;
-  ownerId: string;
-}
 
 export function RoomLobbyPage() {
   const { inviteLink } = useParams<{ inviteLink: string }>();
   const { user } = useUser();
-  const { setRoom, pendingRequests, setPendingRequests } = useRoom();
   const navigate = useNavigate();
-  const [room, setRoomData] = useState<RoomData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isOwner, setIsOwner] = useState(false);
+
+  const { room, loading, error } = useRoomData(inviteLink);
+  const isOwner = user?.id === room?.ownerId;
+  const { pendingRequests, handleApprove, handleReject } = useRoomSocket(room, isOwner, user);
+
   const [linkCopied, setLinkCopied] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      const socket = getRoomsSocket(user.id);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!inviteLink || !user) return;
-
-    fetch(`http://localhost:3000/rooms/${inviteLink}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setRoomData(data);
-        const isOwnerLocal = data.ownerId === user.id;
-        setIsOwner(isOwnerLocal);
-        setRoom(data);
-        
-        if (user?.id) {
-          const socket = getRoomsSocket(user.id);
-          socket.emit('room:join', { roomId: data.id });
-        }
-        
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [inviteLink, user]);
-
-  useEffect(() => {
-    if (!user || !room) return;
-
-    const socket = getRoomsSocket(user.id);
-    const isOwnerLocal = room.ownerId === user.id;
-
-    if (isOwnerLocal) {
-      const handlePendingRequest = ({ request }: { request: PendingRequest }) => {
-        setPendingRequests((prev: PendingRequest[]) => {
-          if (prev.some((r) => r.id === request.id)) return prev;
-          return [...prev, request];
-        });
-      };
-      
-      socket.on('room:pending-request', handlePendingRequest);
-
-      return () => {
-        socket.off('room:pending-request', handlePendingRequest);
-      };
-    }
-    
-    if (!isOwnerLocal) {
-      socket.emit('room:join-request', { inviteLink, userId: user.id, userName: user.name });
-      
-      const handleApproved = () => {
-        navigate(`/room/${room.id}/session`);
-      };
-      
-      socket.on('room:join-approved', handleApproved);
-
-      return () => {
-        socket.off('room:join-approved', handleApproved);
-      };
-    }
-  }, [room?.id, room?.ownerId, user, inviteLink, navigate, setPendingRequests]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/room/${inviteLink}`);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
-  };
-
-  const handleApprove = (requestUserId: string) => {
-    if (!user || !room) return;
-    const socket = getRoomsSocket(user.id);
-    socket.emit('room:approve', { roomId: room.id, userId: requestUserId });
-    setPendingRequests((prev: PendingRequest[]) => prev.filter((r) => r.userId !== requestUserId));
-  };
-
-  const handleReject = (requestUserId: string) => {
-    if (!user || !room) return;
-    const socket = getRoomsSocket(user.id);
-    socket.emit('room:reject', { roomId: room.id, userId: requestUserId });
-    setPendingRequests((prev: PendingRequest[]) => prev.filter((r) => r.userId !== requestUserId));
   };
 
   const handleStartSession = () => {
@@ -126,7 +36,7 @@ export function RoomLobbyPage() {
     );
   }
 
-  if (!room && !loading) {
+  if (error || !room) {
     return (
       <Card style={{ width: '400px' }}>
         <Card.Body>
@@ -140,13 +50,13 @@ export function RoomLobbyPage() {
     );
   }
 
-  if (isOwner || room?.ownerId === user?.id) {
+  if (isOwner) {
     return (
       <>
         <Card style={{ width: '450px' }}>
           <Card.Body>
             <div className="text-center mb-4">
-              <h4>{room?.name}</h4>
+              <h4>{room.name}</h4>
               <p className="text-muted">Reunión creada</p>
             </div>
 
@@ -174,7 +84,7 @@ export function RoomLobbyPage() {
           </div>
         </Card>
 
-        {showRequestsModal && room && (
+        {showRequestsModal && (
           <PendingRequestsModal
             roomId={room.id}
             pendingRequests={pendingRequests}

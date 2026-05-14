@@ -12,7 +12,7 @@ import { Server, Socket } from 'socket.io';
 @WebSocketGateway({ namespace: '/signaling', cors: { origin: '*' } })
 export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   private userSocketMap: Map<string, string> = new Map();
 
