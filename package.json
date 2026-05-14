@@ -1,0 +1,15 @@
+{
+  "name": "test-meet",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"pnpm --filter testmeet-backend dev\" \"pnpm --filter testmeet-frontend dev\"",
+    "dev:backend": "pnpm --filter testmeet-backend dev",
+    "dev:frontend": "pnpm --filter testmeet-frontend dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

@@ -1,0 +1,7 @@
+packages:
+  - 'testmeet-backend'
+  - 'testmeet-frontend'
+allowBuilds:
+  '@nestjs/core': true
+  '@scarf/scarf': true
+  esbuild: true
