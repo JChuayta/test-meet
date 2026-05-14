@@ -1,0 +1,8 @@
+import { Module } from '@nestjs/common';
+import { SignalingGateway } from './infrastructure/gateways/signaling.gateway';
+
+@Module({
+  providers: [SignalingGateway],
+  exports: [SignalingGateway],
+})
+export class SignalingModule {}
