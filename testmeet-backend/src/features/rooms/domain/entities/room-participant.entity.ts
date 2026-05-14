@@ -16,7 +16,7 @@ export class RoomParticipant {
   @CreateDateColumn()
   joinedAt: Date;
 
-  @ManyToOne(() => Room, () => {})
+  @ManyToOne(() => Room, (r) => r.participants)
   @JoinColumn({ name: 'roomId' })
   room: Room;
 
