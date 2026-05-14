@@ -13,6 +13,10 @@ interface UseMultiParticipantSignalingReturn {
   initiateCallWithParticipant: (participantId: string) => Promise<void>;
   callStatus: 'idle' | 'calling' | 'answered' | 'connected';
   activeParticipants: Set<string>;
+  toggleAudio: () => void;
+  toggleVideo: () => void;
+  isAudioEnabled: boolean;
+  isVideoEnabled: boolean;
 }
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -30,6 +34,8 @@ export const useMultiParticipantSignaling = ({
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'answered' | 'connected'>('idle');
   const [activeParticipants, setActiveParticipants] = useState<Set<string>>(new Set());
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
 
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
@@ -37,6 +43,25 @@ export const useMultiParticipantSignaling = ({
   const hasSetRemoteDescriptionRef = useRef<Map<string, boolean>>(new Map());
   const answerCallFromParticipantRef = useRef<((participantId: string, offerSdp: string) => Promise<void>) | undefined>(undefined);
   const flushPendingCandidatesRef = useRef<((pc: RTCPeerConnection, participantId: string) => Promise<void>) | undefined>(undefined);
+
+  const toggleAudio = useCallback(() => {
+    setIsAudioEnabled(prev => !prev);
+  }, []);
+
+  const toggleVideo = useCallback(() => {
+    setIsVideoEnabled(prev => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = isAudioEnabled;
+      });
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = isVideoEnabled;
+      });
+    }
+  }, [isAudioEnabled, isVideoEnabled, localStream]);
 
   const createPeerConnection = useCallback((participantId: string) => {
     if (peerConnectionsRef.current.has(participantId)) {
@@ -109,7 +134,6 @@ export const useMultiParticipantSignaling = ({
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (e) {
-          // Error adding ICE candidate
         }
       }
       pendingCandidatesRef.current.set(participantId, []);
@@ -121,18 +145,29 @@ export const useMultiParticipantSignaling = ({
       let stream = localStream;
       if (!stream) {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream.getAudioTracks().forEach(track => { track.enabled = false; });
+        stream.getVideoTracks().forEach(track => { track.enabled = false; });
         setLocalStream(stream);
+        setIsAudioEnabled(false);
+        setIsVideoEnabled(false);
       }
 
-      const pc = createPeerConnection(participantId);
+      let pc = peerConnectionsRef.current.get(participantId);
+      
+      if (pc) {
+        if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
+          pc.close();
+          peerConnectionsRef.current.delete(participantId);
+          pc = null;
+        }
+      }
 
-      const existingSenders = pc.getSenders();
-      const existingTracks = new Set(existingSenders.map(sender => sender.track?.id));
+      if (!pc) {
+        pc = createPeerConnection(participantId);
+      }
 
       stream.getTracks().forEach((track) => {
-        if (!existingTracks.has(track.id)) {
-          pc.addTrack(track, stream);
-        }
+        pc.addTrack(track, stream);
       });
 
       const offer = await pc.createOffer();
@@ -153,19 +188,29 @@ export const useMultiParticipantSignaling = ({
     try {
       let stream = localStream;
       if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          stream.getAudioTracks().forEach(track => { track.enabled = false; });
+          stream.getVideoTracks().forEach(track => { track.enabled = false; });
+          setLocalStream(stream);
+          setIsAudioEnabled(false);
+          setIsVideoEnabled(false);
+        } catch (mediaError: any) {
+          if (mediaError.name === 'NotReadableError' || mediaError.name === 'DevicesNotFoundError') {
+            throw new Error('Camera or microphone is in use by another application. Please close other apps using your camera.');
+          }
+          throw mediaError;
+        }
       }
 
-      const pc = createPeerConnection(participantId);
+      let pc = peerConnectionsRef.current.get(participantId);
 
-      const existingSenders = pc.getSenders();
-      const existingTracks = new Set(existingSenders.map(sender => sender.track?.id));
+      if (!pc) {
+        pc = createPeerConnection(participantId);
+      }
 
       stream.getTracks().forEach((track) => {
-        if (!existingTracks.has(track.id)) {
-          pc.addTrack(track, stream);
-        }
+        pc.addTrack(track, stream);
       });
 
       await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerSdp)));
@@ -233,7 +278,6 @@ export const useMultiParticipantSignaling = ({
       try {
         await answerCallFromParticipantRef.current?.(data.fromUserId, data.offerSdp);
       } catch (error) {
-        // Failed to auto-answer call
       }
     });
 
@@ -252,7 +296,6 @@ export const useMultiParticipantSignaling = ({
             });
           }
         } catch (error) {
-          // Error setting remote description
         }
       }
     });
@@ -264,7 +307,6 @@ export const useMultiParticipantSignaling = ({
           try {
             await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
           } catch (error) {
-            // Error adding ICE candidate
           }
         } else {
           const candidates = pendingCandidatesRef.current.get(data.participantId) || [];
@@ -306,5 +348,9 @@ export const useMultiParticipantSignaling = ({
     initiateCallWithParticipant,
     callStatus,
     activeParticipants,
+    toggleAudio,
+    toggleVideo,
+    isAudioEnabled,
+    isVideoEnabled,
   };
 };

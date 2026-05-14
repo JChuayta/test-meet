@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, ListGroup, Modal, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getRoomsSocket } from '../../../../shared/config/socket';
 import { useRoom } from '../../../../shared/context/RoomContext';
@@ -23,10 +23,10 @@ export function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [participants, setParticipants] = useState<string[]>([]);
   const roomsSocketRef = useRef<any>(null);
+  const calledParticipantsRef = useRef<Set<string>>(new Set());
+  const initiateRef = useRef<((participantId: string) => Promise<void>) | null>(null);
 
   const {
     localStream,
@@ -34,7 +34,15 @@ export function RoomPage() {
     initiateCallWithParticipant,
     callStatus,
     activeParticipants,
+    toggleAudio,
+    toggleVideo,
+    isAudioEnabled,
+    isVideoEnabled,
   } = useMultiParticipantSignaling({ userId: user?.id || '', participants });
+
+  useEffect(() => {
+    initiateRef.current = initiateCallWithParticipant;
+  }, [initiateCallWithParticipant]);
 
   useEffect(() => {
     if (!roomId || !user) return;
@@ -85,23 +93,23 @@ export function RoomPage() {
     if (!participants || participants.length === 0 || !user) return;
     if (!isOwner) return;
 
-    participants.forEach((participantId) => {
-      if (participantId !== user.id) {
-        initiateCallWithParticipant(participantId).catch(() => {
-          // Error initiating call
-        });
-      }
-    });
-  }, [participants, user, isOwner, initiateCallWithParticipant]);
+    const remoteParticipants = participants.filter(id => id !== user.id);
+    if (remoteParticipants.length === 0) return;
 
-  useEffect(() => {
-    if (localStream) {
-      const audioTracks = localStream.getAudioTracks();
-      const videoTracks = localStream.getVideoTracks();
-      audioTracks.forEach((track) => { track.enabled = !isMuted; });
-      videoTracks.forEach((track) => { track.enabled = !isVideoOff; });
-    }
-  }, [isMuted, isVideoOff, localStream]);
+    let delay = 0;
+    remoteParticipants.forEach((participantId) => {
+      if (calledParticipantsRef.current.has(participantId)) {
+        return;
+      }
+      calledParticipantsRef.current.add(participantId);
+      delay += 1000;
+      setTimeout(() => {
+        initiateRef.current?.(participantId).catch(() => {
+          calledParticipantsRef.current.delete(participantId);
+        });
+      }, delay);
+    });
+  }, [participants, user, isOwner]);
 
   const handleApprove = (requestUserId: string) => {
     if (!roomId || !user) return;
@@ -126,9 +134,6 @@ export function RoomPage() {
     navigate('/dashboard');
   };
 
-  const toggleMute = () => setIsMuted(!isMuted);
-  const toggleVideo = () => setIsVideoOff(!isVideoOff);
-
   if (loading) {
     return <div className="text-center"><Spinner animation="border" /><p>Conectando a la sala...</p></div>;
   }
@@ -152,11 +157,11 @@ export function RoomPage() {
       </div>
 
       <div className="d-flex justify-content-center gap-3 p-3 bg-light">
-        <Button variant={isMuted ? 'danger' : 'secondary'} onClick={toggleMute}>
-          {isMuted ? '🔇' : '🎤'}
+        <Button variant={isAudioEnabled ? 'secondary' : 'danger'} onClick={toggleAudio}>
+          {isAudioEnabled ? '🎤' : '🔇'}
         </Button>
-        <Button variant={isVideoOff ? 'danger' : 'secondary'} onClick={toggleVideo}>
-          {isVideoOff ? '📵' : '📹'}
+        <Button variant={isVideoEnabled ? 'secondary' : 'danger'} onClick={toggleVideo}>
+          {isVideoEnabled ? '📹' : '📵'}
         </Button>
         <Button variant={showChat ? 'primary' : 'outline-primary'} onClick={() => setShowChat(!showChat)}>
           💬

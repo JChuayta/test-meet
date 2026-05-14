@@ -36,10 +36,10 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket
   ) {
     const callerId = Array.from(this.userSocketMap.entries()).find(([_, socketId]) => socketId === client.id)?.[0];
-    const targetSocket = this.findSocketByUserId(data.participantId);
+    const targetSocketId = this.userSocketMap.get(data.participantId);
     
-    if (targetSocket) {
-      targetSocket.emit('call:received', {
+    if (targetSocketId) {
+      this.server.to(targetSocketId).emit('call:received', {
         fromUserId: callerId,
         offerSdp: data.offerSdp
       });
@@ -52,12 +52,12 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket
   ) {
     const answererId = Array.from(this.userSocketMap.entries()).find(([_, socketId]) => socketId === client.id)?.[0];
-    const targetSocket = this.findSocketByUserId(data.participantId);
+    const targetSocketId = this.userSocketMap.get(data.participantId);
     
-    if (targetSocket) {
-      targetSocket.emit('call:answered', { 
+    if (targetSocketId) {
+      this.server.to(targetSocketId).emit('call:answered', {
         participantId: answererId,
-        answerSdp: data.answerSdp 
+        answerSdp: data.answerSdp
       });
     }
   }
@@ -68,27 +68,13 @@ export class SignalingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket
   ) {
     const senderId = Array.from(this.userSocketMap.entries()).find(([_, socketId]) => socketId === client.id)?.[0];
-    const targetSocket = this.findSocketByUserId(data.participantId);
+    const targetSocketId = this.userSocketMap.get(data.participantId);
     
-    if (targetSocket) {
-      targetSocket.emit('ice:candidate', { 
+    if (targetSocketId) {
+      this.server.to(targetSocketId).emit('ice:candidate', {
         participantId: senderId,
-        candidate: data.candidate 
+        candidate: data.candidate
       });
     }
-  }
-
-  private findSocketByUserId(userId: string): Socket | undefined {
-    if (!this.server.sockets?.sockets) {
-      return undefined;
-    }
-    let foundSocket: Socket | undefined;
-    this.server.sockets.sockets.forEach((socket, id) => {
-      if (socket.handshake.auth.userId === userId) {
-        this.userSocketMap.set(userId, id);
-        foundSocket = socket;
-      }
-    });
-    return foundSocket;
   }
 }
